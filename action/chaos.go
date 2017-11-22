@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/gaia-adm/pumba/container"
+	"../container"
+	log "github.com/sirupsen/logrus"
 )
 
 var (

@@ -8,12 +8,11 @@ import (
 	"strings"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 
 	types "github.com/docker/docker/api/types"
 	ctypes "github.com/docker/docker/api/types/container"
 	dockerapi "github.com/docker/docker/client"
-	"github.com/docker/go-connections/nat"
 )
 
 const (
@@ -392,10 +391,10 @@ func (client dockerClient) tcContainerCommand(ctx context.Context, target Contai
 		// use target container network stack
 		NetworkMode: ctypes.NetworkMode("container:" + target.ID()),
 		// others
-		PortBindings: nat.PortMap{},
-		DNS:          []string{},
-		DNSOptions:   []string{},
-		DNSSearch:    []string{},
+		//PortBindings: nat.PortMap{},//FIXME: cannot use "github.com/docker/go-connections/nat".PortMap literal (type "github.com/docker/go-connections/nat".PortMap) as type "github.com/docker/docker/vendor/github.com/docker/go-connections/nat".PortMap in field value
+		DNS:        []string{},
+		DNSOptions: []string{},
+		DNSSearch:  []string{},
 	}
 	log.Debugf("Host Config: %+v", hconfig)
 	createResponse, err := client.containerAPI.ContainerCreate(ctx, &config, &hconfig, nil, "")

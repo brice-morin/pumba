@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	log "github.com/Sirupsen/logrus"
-	"github.com/gaia-adm/pumba/action"
-	"github.com/gaia-adm/pumba/container"
+	"./action"
+	"./container"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/urfave/cli"
 
@@ -525,6 +525,16 @@ func runChaosCommand(cmd interface{}, interval time.Duration, names []string, pa
 	}
 }
 
+func Kill(signal string, interval time.Duration, names []string, pattern string) error {
+	if _, ok := LinuxSignals[signal]; !ok {
+		err := errors.New("Unexpected signal: " + signal)
+		log.Error(err)
+		return err
+	}
+	runChaosCommand(action.CommandKill{Signal: signal}, interval, names, pattern, chaos.KillContainers)
+	return nil
+}
+
 // KILL Command
 func kill(c *cli.Context) error {
 	// get interval
@@ -537,13 +547,7 @@ func kill(c *cli.Context) error {
 	names, pattern := getNamesOrPattern(c)
 	// get signal
 	signal := c.String("signal")
-	if _, ok := LinuxSignals[signal]; !ok {
-		err := errors.New("Unexpected signal: " + signal)
-		log.Error(err)
-		return err
-	}
-	runChaosCommand(action.CommandKill{Signal: signal}, interval, names, pattern, chaos.KillContainers)
-	return nil
+	return Kill(signal, interval, names, pattern)
 }
 
 func parseNetemOptions(c *cli.Context) ([]string, string, time.Duration, string, []net.IP, string, error) {
