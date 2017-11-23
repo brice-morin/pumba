@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"../container"
+	"github.com/brice-morin/pumba/container"
 	log "github.com/sirupsen/logrus"
 )
 

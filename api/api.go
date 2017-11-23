@@ -6,8 +6,8 @@ import (
 	"net"
 	"time"
 
-	"../action"
-	"../container"
+	"github.com/brice-morin/pumba/action"
+	"github.com/brice-morin/pumba/container"
 	log "github.com/sirupsen/logrus"
 )
 
