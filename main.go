@@ -15,9 +15,9 @@ import (
 	"syscall"
 	"time"
 
-	"./action"
-	"./api"
-	"./container"
+	"github.com/brice-morin/pumba/action"
+	"github.com/brice-morin/pumba/api"
+	"github.com/brice-morin/pumba/container"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/urfave/cli"
