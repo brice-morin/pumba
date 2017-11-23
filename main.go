@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"./action"
+	"./api"
 	"./container"
 	log "github.com/sirupsen/logrus"
 
@@ -23,47 +24,6 @@ import (
 
 	"github.com/johntdyer/slackrus"
 )
-
-var (
-	client     container.Client
-	chaos      action.Chaos
-	topContext context.Context
-)
-
-// LinuxSignals valid Linux signal table
-// http://www.comptechdoc.org/os/linux/programming/linux_pgsignals.html
-var LinuxSignals = map[string]int{
-	"SIGHUP":    1,
-	"SIGINT":    2,
-	"SIGQUIT":   3,
-	"SIGILL":    4,
-	"SIGTRAP":   5,
-	"SIGIOT":    6,
-	"SIGBUS":    7,
-	"SIGFPE":    8,
-	"SIGKILL":   9,
-	"SIGUSR1":   10,
-	"SIGSEGV":   11,
-	"SIGUSR2":   12,
-	"SIGPIPE":   13,
-	"SIGALRM":   14,
-	"SIGTERM":   15,
-	"SIGSTKFLT": 16,
-	"SIGCHLD":   17,
-	"SIGCONT":   18,
-	"SIGSTOP":   19,
-	"SIGTSTP":   20,
-	"SIGTTIN":   21,
-	"SIGTTOU":   22,
-	"SIGURG":    23,
-	"SIGXCPU":   24,
-	"SIGXFSZ":   25,
-	"SIGVTALRM": 26,
-	"SIGPROF":   27,
-	"SIGWINCH":  28,
-	"SIGIO":     29,
-	"SIGPWR":    30,
-}
 
 var (
 	// Version that is passed on compile time through -ldflags
@@ -240,7 +200,7 @@ func main() {
 					Description: "adds a packet losses, based on 4-state Markov probability model\n \t\tstate (1) – packet received successfully\n \t\tstate (2) – packet received within a burst\n \t\tstate (3) – packet lost within a burst\n \t\tstate (4) – isolated packet lost within a gap\n \tsee: http://www.voiptroubleshooter.com/indepth/burstloss.html",
 					Action:      netemLossState,
 				},
-				{
+				/*{
 					Name: "loss-gemodel",
 					Flags: []cli.Flag{
 						cli.Float64Flag{
@@ -268,7 +228,7 @@ func main() {
 					ArgsUsage:   fmt.Sprintf("containers (name, list of names, or RE2 regex if prefixed with %q", Re2Prefix),
 					Description: "adds packet losses, according to the Gilbert-Elliot loss model\n \tsee: http://www.voiptroubleshooter.com/indepth/burstloss.html",
 					Action:      netemLossGEmodel,
-				},
+				},*/
 				{
 					Name:  "duplicate",
 					Usage: "TBD",
@@ -278,7 +238,7 @@ func main() {
 
 					Usage: "TBD",
 				},
-				{
+				/*{
 					Name: "rate",
 					Flags: []cli.Flag{
 						cli.StringFlag{
@@ -306,10 +266,10 @@ func main() {
 					ArgsUsage:   fmt.Sprintf("containers (name, list of names, or RE2 regex if prefixed with %q", Re2Prefix),
 					Description: "rate limit egress traffic for specified containers",
 					Action:      netemRate,
-				},
+				},*/
 			},
 		},
-		{
+		/*{
 			Name: "pause",
 			Flags: []cli.Flag{
 				cli.StringFlag{
@@ -321,8 +281,8 @@ func main() {
 			ArgsUsage:   fmt.Sprintf("containers (name, list of names, or RE2 regex if prefixed with %q", Re2Prefix),
 			Description: "pause all running processes within target containers",
 			Action:      pause,
-		},
-		{
+		},*/
+		/*{
 			Name: "stop",
 			Flags: []cli.Flag{
 				cli.IntFlag{
@@ -335,8 +295,8 @@ func main() {
 			ArgsUsage:   fmt.Sprintf("containers (name, list of names, or RE2 regex if prefixed with %q", Re2Prefix),
 			Description: "stop the main process inside target containers, sending  SIGTERM, and then SIGKILL after a grace period",
 			Action:      stop,
-		},
-		{
+		},*/
+		/*{
 			Name: "rm",
 			Flags: []cli.Flag{
 				cli.BoolTFlag{
@@ -356,7 +316,7 @@ func main() {
 			ArgsUsage:   fmt.Sprintf("containers (name, list of names, or RE2 regex if prefixed with %q", Re2Prefix),
 			Description: "remove target containers, with links and volumes",
 			Action:      remove,
-		},
+		},*/
 	}
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
@@ -424,6 +384,9 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Fatal(err)
 	}
+
+	api.Kill("SIGKILL", 2*time.Minute, []string{"sfchaosxp_device_0-0-0_1"}, "")
+
 }
 
 func before(c *cli.Context) error {
@@ -451,11 +414,11 @@ func before(c *cli.Context) error {
 		return err
 	}
 	// create new Docker client
-	client = container.NewClient(c.GlobalString("host"), tls)
+	api.Client = container.NewClient(c.GlobalString("host"), tls)
 	// create new Chaos instance
-	chaos = action.NewChaos()
+	api.Chaos = action.NewChaos()
 	// handle termination signal
-	topContext = handleSignals()
+	api.TopContext = handleSignals()
 	return nil
 }
 
@@ -494,47 +457,6 @@ func getNamesOrPattern(c *cli.Context) ([]string, string) {
 	return names, pattern
 }
 
-func runChaosCommand(cmd interface{}, interval time.Duration, names []string, pattern string, chaosFn func(context.Context, container.Client, []string, string, interface{}) error) {
-	// create Time channel for specified interval
-	var tick <-chan time.Time
-	if interval == 0 {
-		tick = time.NewTimer(interval).C
-	} else {
-		tick = time.NewTicker(interval).C
-	}
-
-	// handle the 'chaos' command
-	ctx, cancel := context.WithCancel(topContext)
-	for {
-		// cancel current context on exit
-		defer cancel()
-		// run chaos function
-		if err := chaosFn(ctx, client, names, pattern, cmd); err != nil {
-			log.Error(err)
-		}
-		// wait for next timer tick or cancel
-		select {
-		case <-topContext.Done():
-			return // not to leak the goroutine
-		case <-tick:
-			if interval == 0 {
-				return // not to leak the goroutine
-			}
-			log.Debug("Next chaos execution (tick) ...")
-		}
-	}
-}
-
-func Kill(signal string, interval time.Duration, names []string, pattern string) error {
-	if _, ok := LinuxSignals[signal]; !ok {
-		err := errors.New("Unexpected signal: " + signal)
-		log.Error(err)
-		return err
-	}
-	runChaosCommand(action.CommandKill{Signal: signal}, interval, names, pattern, chaos.KillContainers)
-	return nil
-}
-
 // KILL Command
 func kill(c *cli.Context) error {
 	// get interval
@@ -547,7 +469,7 @@ func kill(c *cli.Context) error {
 	names, pattern := getNamesOrPattern(c)
 	// get signal
 	signal := c.String("signal")
-	return Kill(signal, interval, names, pattern)
+	return api.Kill(signal, interval, names, pattern)
 }
 
 func parseNetemOptions(c *cli.Context) ([]string, string, time.Duration, string, []net.IP, string, error) {
@@ -654,19 +576,7 @@ func netemDelay(c *cli.Context) error {
 		log.Error(err)
 		return err
 	}
-	// pepare netem delay command
-	delayCmd := action.CommandNetemDelay{
-		NetInterface: netInterface,
-		IPs:          ips,
-		Duration:     duration,
-		Time:         time,
-		Jitter:       jitter,
-		Correlation:  correlation,
-		Distribution: distribution,
-		Image:        image,
-	}
-	runChaosCommand(delayCmd, interval, names, pattern, chaos.NetemDelayContainers)
-	return nil
+	return api.NetemDelay(interval, duration, names, pattern, netInterface, ips, image, time, jitter, correlation, distribution)
 }
 
 // NETEM LOSS random command
@@ -695,17 +605,8 @@ func netemLossRandom(c *cli.Context) error {
 		log.Error(err)
 		return err
 	}
-	// pepare netem loss command
-	delayCmd := action.CommandNetemLossRandom{
-		NetInterface: netInterface,
-		IPs:          ips,
-		Duration:     duration,
-		Percent:      percent,
-		Correlation:  correlation,
-		Image:        image,
-	}
-	runChaosCommand(delayCmd, interval, names, pattern, chaos.NetemLossRandomContainers)
-	return nil
+	return api.NetemLossRandom(interval, duration, names, pattern,
+		netInterface, ips, image, correlation, percent)
 }
 
 // NETEM LOSS state command
@@ -755,24 +656,13 @@ func netemLossState(c *cli.Context) error {
 		log.Error(err)
 		return err
 	}
-	// pepare netem loss command
-	delayCmd := action.CommandNetemLossState{
-		NetInterface: netInterface,
-		IPs:          ips,
-		Duration:     duration,
-		P13:          p13,
-		P31:          p31,
-		P32:          p32,
-		P23:          p23,
-		P14:          p14,
-		Image:        image,
-	}
-	runChaosCommand(delayCmd, interval, names, pattern, chaos.NetemLossStateContainers)
-	return nil
+	return api.NetemLossRate(interval, duration, names, pattern,
+		netInterface, ips, image,
+		p13, p31, p32, p23, p14)
 }
 
 // NETEM Gilbert-Elliot command
-func netemLossGEmodel(c *cli.Context) error {
+/*func netemLossGEmodel(c *cli.Context) error {
 	// get interval
 	interval, err := getIntervalValue(c)
 	if err != nil {
@@ -824,10 +714,10 @@ func netemLossGEmodel(c *cli.Context) error {
 	}
 	runChaosCommand(delayCmd, interval, names, pattern, chaos.NetemLossGEmodelContainers)
 	return nil
-}
+}*/
 
 // NETEM RATE command
-func netemRate(c *cli.Context) error {
+/*func netemRate(c *cli.Context) error {
 	// get interval
 	interval, err := getIntervalValue(c)
 	if err != nil {
@@ -874,10 +764,10 @@ func netemRate(c *cli.Context) error {
 	}
 	runChaosCommand(rateCmd, interval, names, pattern, chaos.NetemRateContainers)
 	return nil
-}
+}*/
 
 // PAUSE command
-func pause(c *cli.Context) error {
+/*func pause(c *cli.Context) error {
 	// get interval
 	interval, err := getIntervalValue(c)
 	if err != nil {
@@ -902,10 +792,10 @@ func pause(c *cli.Context) error {
 	}
 	runChaosCommand(cmd, interval, names, pattern, chaos.PauseContainers)
 	return nil
-}
+}*/
 
 // REMOVE Command
-func remove(c *cli.Context) error {
+/*func remove(c *cli.Context) error {
 	// get interval
 	interval, err := getIntervalValue(c)
 	if err != nil {
@@ -924,10 +814,10 @@ func remove(c *cli.Context) error {
 	cmd := action.CommandRemove{Force: force, Links: links, Volumes: volumes}
 	runChaosCommand(cmd, interval, names, pattern, chaos.RemoveContainers)
 	return nil
-}
+}*/
 
 // STOP Command
-func stop(c *cli.Context) error {
+/*func stop(c *cli.Context) error {
 	// get interval
 	interval, err := getIntervalValue(c)
 	if err != nil {
@@ -939,7 +829,7 @@ func stop(c *cli.Context) error {
 	cmd := action.CommandStop{WaitTime: c.Int("time")}
 	runChaosCommand(cmd, interval, names, pattern, chaos.StopContainers)
 	return nil
-}
+}*/
 
 func handleSignals() context.Context {
 	// Graceful shut-down on SIGINT/SIGTERM
